@@ -1,5 +1,4 @@
 @extends('admin.layouts')
-
 @section('css')
     <link href="/assets/global/plugins/fancybox/source/jquery.fancybox.css" rel="stylesheet" type="text/css" />
     <style>
@@ -9,7 +8,6 @@
         }
     </style>
 @endsection
-@section('title', '控制面板')
 @section('content')
     <!-- BEGIN CONTENT BODY -->
     <div class="page-content" style="padding-top:0;">
@@ -20,26 +18,21 @@
                 <div class="portlet light bordered">
                     <div class="portlet-title">
                         <div class="caption font-dark">
-                            <i class="icon-list font-dark"></i>
                             <span class="caption-subject bold uppercase"> 卡券列表 </span>
                         </div>
                         <div class="actions">
                             <div class="btn-group btn-group-devided" data-toggle="buttons">
-                                <button class="btn sbold blue" onclick="exportCoupon()"> 批量导出
-                                    <i class="fa fa-download"></i>
-                                </button>
-                                <button class="btn sbold blue" onclick="addCoupon()"> 生成
-                                    <i class="fa fa-plus"></i>
-                                </button>
+                                <button class="btn sbold blue" onclick="exportCoupon()"> 批量导出 </button>
+                                <button class="btn sbold blue" onclick="addCoupon()"> 生成 </button>
                             </div>
                         </div>
                     </div>
                     <div class="portlet-body">
-                        <div class="table-scrollable">
-                            <table class="table table-striped table-bordered table-hover table-checkable order-column">
+                        <div class="table-scrollable table-scrollable-borderless">
+                            <table class="table table-hover table-light">
                                 <thead>
                                 <tr>
-                                    <th> ID </th>
+                                    <th> # </th>
                                     <th> 名称 </th>
                                     <th> 券码 </th>
                                     <th> LOGO </th>
@@ -54,7 +47,7 @@
                                 <tbody>
                                 @if($couponList->isEmpty())
                                     <tr>
-                                        <td colspan="10">暂无数据</td>
+                                        <td colspan="10" style="text-align: center;">暂无数据</td>
                                     </tr>
                                 @else
                                     @foreach($couponList as $coupon)
@@ -77,7 +70,7 @@
                                                 @if($coupon->type == '1' || $coupon->type == '3')
                                                     {{$coupon->amount}}元
                                                 @else
-                                                    {{$coupon->discount * 10}}折
+                                                    {{$coupon->discount}}折
                                                 @endif
                                             </td>
                                             <td> {{date('Y-m-d', $coupon->available_start)}} ~ {{date('Y-m-d', $coupon->available_end)}} </td>
@@ -94,7 +87,7 @@
                                             </td>
                                             <td>
                                                 @if($coupon->status != '1')
-                                                    <button type="button" class="btn btn-sm red btn-outline" onclick="delCoupon('{{$coupon->id}}')">删除</button>
+                                                    <button type="button" class="btn btn-sm red btn-outline" onclick="delCoupon('{{$coupon->id}}')"> 删除 </button>
                                                 @endif
                                             </td>
                                         </tr>
@@ -124,7 +117,6 @@
 @endsection
 @section('script')
     <script src="/assets/global/plugins/fancybox/source/jquery.fancybox.js" type="text/javascript"></script>
-    <script src="/js/layer/layer.js" type="text/javascript"></script>
 
     <script type="text/javascript">
         // 批量导出卡券

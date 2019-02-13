@@ -1,10 +1,8 @@
 @extends('admin.layouts')
-
 @section('css')
     <link href="/assets/global/plugins/datatables/datatables.min.css" rel="stylesheet" type="text/css" />
     <link href="/assets/global/plugins/datatables/plugins/bootstrap/datatables.bootstrap.css" rel="stylesheet" type="text/css" />
 @endsection
-@section('title', '控制面板')
 @section('content')
     <!-- BEGIN CONTENT BODY -->
     <div class="page-content" style="padding-top:0;">
@@ -13,13 +11,6 @@
             <div class="col-md-12">
                 <!-- BEGIN EXAMPLE TABLE PORTLET-->
                 <div class="portlet light bordered">
-                    <div class="portlet-title">
-                        <div class="caption font-dark">
-                            <i class="icon-info font-dark"></i>
-                            <span class="caption-subject bold uppercase"> 通用配置 </span>
-                        </div>
-
-                    </div>
                     <div class="portlet-body">
                         <ul class="nav nav-tabs">
                             <li @if(Request::get('tab') == '' || Request::get('tab') == '1') class="active" @endif>
@@ -32,7 +23,7 @@
                                 <a href="#tab3" data-toggle="tab"> 混淆 </a>
                             </li>
                             <li @if(Request::get('tab') == '4') class="active" @endif>
-                                <a href="#tab4" data-toggle="tab"> 账号等级 </a>
+                                <a href="#tab4" data-toggle="tab"> 等级 </a>
                             </li>
                             <li @if(Request::get('tab') == '5') class="active" @endif>
                                 <a href="#tab5" data-toggle="tab"> 国家地区 </a>
@@ -201,19 +192,23 @@
                                     <table class="table table-striped table-bordered table-hover table-checkable order-column">
                                         <thead>
                                             <tr>
-                                                <th style="width: 35%;"> 国家/地区名称 </th>
-                                                <th style="width: 35%;"> 代码 </th>
+                                                <th style="width: 20%;"> 图标 </th>
+                                                <th style="width: 25%;"> 国家/地区名称 </th>
+                                                <th style="width: 25%;"> 代码 </th>
                                                 <th style="width: 30%;"> 操作 </th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                         @if($country_list->isEmpty())
                                             <tr>
-                                                <td colspan="3">暂无数据</td>
+                                                <td colspan="4">暂无数据</td>
                                             </tr>
                                         @else
                                             @foreach($country_list as $country)
                                                 <tr class="odd gradeX" >
+                                                    <td>
+                                                        <img src="{{asset('assets/images/country/' . $country->country_code . '.png')}}" />
+                                                    </td>
                                                     <td> <input id="country_name_{{$country->id}}" name="country_name" value="{{$country->country_name}}" type="text" class="form-control"> </td>
                                                     <td> <input id="country_code_{{$country->id}}" name="country_code" value="{{$country->country_code}}" type="text" class="form-control"></td>
                                                     <td>
@@ -350,8 +345,6 @@
     <!-- END CONTENT BODY -->
 @endsection
 @section('script')
-    <script src="/js/layer/layer.js" type="text/javascript"></script>
-
     <script type="text/javascript">
         // modal关闭时刷新页面
         $(".modal").on("hidden.bs.modal", function () {

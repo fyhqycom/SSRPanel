@@ -7,23 +7,20 @@ use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Contracts\Queue\ShouldQueue;
 
-class userTrafficWarning extends Mailable
+class userTrafficWarning extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
-    protected $websiteName;
     protected $usedPercent;
 
-    public function __construct($websiteName, $usedPercent)
+    public function __construct($usedPercent)
     {
-        $this->websiteName = $websiteName;
         $this->usedPercent = $usedPercent;
     }
 
     public function build()
     {
         return $this->view('emails.userTrafficWarning')->subject('流量警告')->with([
-            'websiteName' => $this->websiteName,
             'usedPercent' => $this->usedPercent
         ]);
     }

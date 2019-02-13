@@ -1,205 +1,281 @@
 <?php
+
 namespace App\Http\Controllers;
 
+use App\Components\Helpers;
+use App\Components\Yzy;
+use App\Components\AlipaySubmit;
+use App\Http\Models\Coupon;
 use App\Http\Models\Goods;
-use App\Http\Models\Paypal;
+use App\Http\Models\Order;
+use App\Http\Models\Payment;
+use App\Http\Models\PaymentCallback;
 use Illuminate\Http\Request;
 use Response;
 use Redirect;
-use Cache;
 use Log;
+use DB;
+use Auth;
 
-use PayPal\Api\Amount;
-use PayPal\Api\Details;
-use PayPal\Api\Item;
-use PayPal\Api\ItemList;
-use PayPal\Api\Payer;
-use PayPal\Api\Payment;
-use PayPal\Api\PaymentExecution;
-use PayPal\Api\RedirectUrls;
-use PayPal\Api\Transaction;
-use PayPal\Api\ShippingAddress;
-use PayPal\Rest\ApiContext;
-use PayPal\Auth\OAuthTokenCredential;
-
+/**
+ * 支付控制器
+ *
+ * Class PaymentController
+ *
+ * @package App\Http\Controllers
+ */
 class PaymentController extends Controller
 {
-    protected static $config;
-    private $apiContext;
+    protected static $systemConfig;
 
     function __construct()
     {
-        self::$config = $this->systemConfig();
-
-        $this->apiContext = new ApiContext(
-            new OAuthTokenCredential(self::$config['paypal_client_id'], self::$config['paypal_client_secret'])
-        );
-        $this->apiContext->setConfig([
-            'mode'           => 'sandbox',
-            'log.LogEnabled' => true,
-            'log.FileName'   => storage_path('logs/paypal.log'),
-            'log.LogLevel'   => 'DEBUG', // 测试DEBUG，生产环境INFO
-            'cache.enabled'  => true,
-            // 'http.CURLOPT_CONNECTTIMEOUT' => 30
-            // 'http.headers.PayPal-Partner-Attribution-Id' => '123123123'
-            //'log.AdapterFactory' => '\PayPal\Log\DefaultLogFactory' // Factory class implementing \PayPal\Log\PayPalLogFactory
-        ]);
+        self::$systemConfig = Helpers::systemConfig();
     }
 
-    // 创建支付
+    // 创建支付单
     public function create(Request $request)
     {
-        $oid = $request->get('oid');
-        $goods_id = $request->get('goods_id');
-        $user = $request->session()->get('user');
+        $goods_id = intval($request->get('goods_id'));
+        $coupon_sn = $request->get('coupon_sn');
+        $pay_type = $request->get('pay_type');
 
-        // 商品信息
-        $goods = Goods::query()->where('id', $goods_id)->first();
+        $goods = Goods::query()->where('is_del', 0)->where('status', 1)->where('id', $goods_id)->first();
         if (!$goods) {
-            //TODO:购买商品页需要做判断，出现异常时挂掉
-            $request->session()->flash('paypalErrorMsg', '创建支付订单失败：所购服务不存在');
-
-            return Redirect::back();
+            return Response::json(['status' => 'fail', 'data' => '', 'message' => '创建支付单失败：商品或服务已下架']);
         }
 
-        // 设置支付信息
-        $payer = new Payer();
-        $payer->setPaymentMethod("paypal");
-
-        // 设置所购商品信息，包含名称、数量、SKU、价格
-        $item1 = new Item();
-        $item1->setName($goods->name)->setCurrency('USD')->setQuantity(1)->setSku($goods->sku)->setPrice($goods->price / 100);
-
-        $itemList = new ItemList();
-        $itemList->setItems([$item1]);
-
-        /*
-        // 设定收货地址信息，防止用户自付款时可改
-        $address = new ShippingAddress();
-        $address->setRecipientName($user['username'])
-            ->setLine1('余杭区')
-            ->setLine2('文一西路969号西溪园区')
-            ->setCity('杭州市')
-            ->setState('浙江省')
-            ->setPhone('+8613800000000')
-            ->setPostalCode('311100')
-            ->setCountryCode('CN');
-
-        // 商品列表写入设定好的地址信息
-        $itemList->setShippingAddress($address);
-        */
-
-        // 设置单据运费、税费、小计算
-        $details = new Details();
-        $details->setShipping(0)->setTax(0)->setSubtotal($goods->price / 100);
-
-        // 设定单据金额
-        $amount = new Amount();
-        $amount->setCurrency("USD")->setTotal($goods->price / 100)->setDetails($details);
-
-        // 跳转页
-        $redirectUrls = new RedirectUrls();
-        $redirectUrls->setReturnUrl(url("payment/execute?subtotal=" . $goods->price / 100))->setCancelUrl(url("payment/cancel"));
-
-        // 设定交易描述
-        $transaction = new Transaction();
-        $transaction->setAmount($amount)->setItemList($itemList)->setDescription("购买虚拟服务")->setInvoiceNumber(uniqid());
-
-        // 创建支付
-        $payment = new Payment();
-        $payment->setIntent("sale")->setPayer($payer)->setRedirectUrls($redirectUrls)->setTransactions([$transaction]);
-        try {
-            $payment->create($this->apiContext);
-        } catch (\Exception $ex) {
-            Log::error($ex->getMessage());
-            Log::error('PayPal授权失败，可能是接口配置错误');
-
-            $request->session()->flash('paypalErrorMsg', 'PayPal授权失败，可能是接口配置错误');
-
-            return Redirect::back();
+        // 判断是否开启有赞云支付
+        if (!self::$systemConfig['is_youzan'] && !self::$systemConfig['is_alipay']) {
+            return Response::json(['status' => 'fail', 'data' => '', 'message' => '创建支付单失败：系统并未开启在线支付功能']);
         }
 
-        // 得到支付授权跳转页（给用户点确认付款用）
-        $approvalUrl = $payment->getApprovalLink();
+        // 判断是否存在同个商品的未支付订单
+        $existsOrder = Order::query()->where('status', 0)->where('user_id', Auth::user()->id)->where('goods_id', $goods_id)->exists();
+        if ($existsOrder) {
+            return Response::json(['status' => 'fail', 'data' => '', 'message' => '创建支付单失败：尚有未支付的订单，请先去支付']);
+        }
 
-        return Redirect::to($approvalUrl);
-    }
+        // 限购控制
+        $strategy = self::$systemConfig['goods_purchase_limit_strategy'];
+        if ($strategy == 'all' || ($strategy == 'package' && $goods->type == 2) || ($strategy == 'free' && $goods->price == 0) || ($strategy == 'package&free' && ($goods->type == 2 || $goods->price == 0))) {
+            $noneExpireOrderExist = Order::query()->where('status', '>=', 0)->where('is_expire', 0)->where('user_id', Auth::user()->id)->where('goods_id', $goods_id)->exists();
+            if ($noneExpireOrderExist) {
+                return Response::json(['status' => 'fail', 'data' => '', 'message' => '创建支付单失败：商品不可重复购买']);
+            }
+        }
 
-    // 执行支付
-    public function execute(Request $request)
-    {
-        \Log::info('execute_params:' . var_export($request->all(), true));
+        // 单个商品限购
+        if ($goods->is_limit == 1) {
+            $noneExpireOrderExist = Order::query()->where('status', '>=', 0)->where('user_id', Auth::user()->id)->where('goods_id', $goods_id)->exists();
+            if ($noneExpireOrderExist) {
+                return Response::json(['status' => 'fail', 'data' => '', 'message' => '创建支付单失败：此商品每人限购1次']);
+            }
+        }
 
-        $subtotal = $request->get('subtotal');
-        $paymentId = $request->get('paymentId');
-        $token = $request->get('token');
-        $PayerID = $request->get('PayerID');
-
-        if (empty($paymentId) || empty($token) || empty($PayerID)) {
-            $request->session()->flash('paypalErrorMsg', '支付回调地址错误');
-
-            return Redirect::to('user/goodsList');
-        } else {
-            // 根据支付单据获取支付信息
-            $payment = Payment::get($paymentId, $this->apiContext);
-
-            $details = new Details();
-            $details->setShipping(0)->setTax(0)->setSubtotal($subtotal);
-
-            $amount = new Amount();
-            $amount->setCurrency('USD')->setTotal($subtotal)->setDetails($details);
-
-            $transaction = new Transaction();
-            $transaction->setAmount($amount);
-
-            // 执行支付
-            $execution = new PaymentExecution();
-            $execution->setPayerId($PayerID)->addTransaction($transaction);
-
-            try {
-                $result = $payment->execute($execution, $this->apiContext);
-                \Log::info(var_export($result, true));
-
-                // 支付成功，写入支付单据信息
-
-
-            } catch (\Exception $ex) {
-                var_dump($ex);
-                echo "支付失败";
-                exit(1);
+        // 使用优惠券
+        if ($coupon_sn) {
+            $coupon = Coupon::query()->where('status', 0)->where('is_del', 0)->whereIn('type', [1, 2])->where('sn', $coupon_sn)->first();
+            if (!$coupon) {
+                return Response::json(['status' => 'fail', 'data' => '', 'message' => '创建支付单失败：优惠券不存在']);
             }
 
-            \Log::info(var_export($payment, true));
+            // 计算实际应支付总价
+            $amount = $coupon->type == 2 ? $goods->price * $coupon->discount / 10 : $goods->price - $coupon->amount;
+            $amount = $amount > 0 ? $amount : 0;
+        } else {
+            $amount = $goods->price;
+        }
 
-            return $payment;
+        // 价格异常判断
+        if ($amount < 0) {
+            return Response::json(['status' => 'fail', 'data' => '', 'message' => '创建支付单失败：订单总价异常']);
+        } elseif ($amount == 0) {
+            return Response::json(['status' => 'fail', 'data' => '', 'message' => '创建支付单失败：订单总价为0，无需使用在线支付']);
+        }
+
+        // 验证账号是否存在有效期更长的套餐
+        if ($goods->type == 2) {
+            $existOrderList = Order::query()
+                ->with(['goods'])
+                ->whereHas('goods', function ($q) {
+                    $q->where('type', 2);
+                })
+                ->where('user_id', Auth::user()->id)
+                ->where('is_expire', 0)
+                ->where('status', 2)
+                ->get();
+
+            foreach ($existOrderList as $vo) {
+                if ($vo->goods->days > $goods->days) {
+                    return Response::json(['status' => 'fail', 'data' => '', 'message' => '支付失败：您已存在有效期更长的套餐，只能购买流量包']);
+                }
+            }
+        }
+
+        DB::beginTransaction();
+        try {
+            $orderSn = date('ymdHis') . mt_rand(100000, 999999);
+            $sn = makeRandStr(12);
+
+            // 支付方式
+            if (self::$systemConfig['is_youzan']) {
+                $pay_way = 2;
+            } elseif (self::$systemConfig['is_alipay']) {
+                $pay_way = 4;
+            }
+
+            // 生成订单
+            $order = new Order();
+            $order->order_sn = $orderSn;
+            $order->user_id = Auth::user()->id;
+            $order->goods_id = $goods_id;
+            $order->coupon_id = !empty($coupon) ? $coupon->id : 0;
+            $order->origin_amount = $goods->price;
+            $order->amount = $amount;
+            $order->expire_at = date("Y-m-d H:i:s", strtotime("+" . $goods->days . " days"));
+            $order->is_expire = 0;
+            $order->pay_way = $pay_way;
+            $order->status = 0;
+            $order->save();
+
+            // 生成支付单
+            if (self::$systemConfig['is_youzan']) {
+                $yzy = new Yzy();
+                $result = $yzy->createQrCode($goods->name, $amount * 100, $orderSn);
+                if (isset($result['error_response'])) {
+                    Log::error('【有赞云】创建二维码失败：' . $result['error_response']['msg']);
+
+                    throw new \Exception($result['error_response']['msg']);
+                }
+            } elseif (self::$systemConfig['is_alipay']) {
+                $parameter = [
+                    "service"        => "create_forex_trade", // WAP:create_forex_trade_wap ,即时到帐:create_forex_trade
+                    "partner"        => self::$systemConfig['alipay_partner'],
+                    "notify_url"     => self::$systemConfig['website_url'] . "/api/alipay", // 异步回调接口
+                    "return_url"     => self::$systemConfig['website_url'],
+                    "out_trade_no"   => $orderSn,  // 订单号
+                    "subject"        => "Package", // 订单名称
+                    //"total_fee"      => $amount, // 金额
+                    "rmb_fee"        => $amount,   // 使用RMB标价，不再使用总金额
+                    "body"           => "",        // 商品描述，可为空
+                    "currency"       => self::$systemConfig['alipay_currency'], // 结算币种
+                    "product_code"   => "NEW_OVERSEAS_SELLER",
+                    "_input_charset" => "utf-8"
+                ];
+
+                // 建立请求
+                $alipaySubmit = new AlipaySubmit(self::$systemConfig['alipay_sign_type'], self::$systemConfig['alipay_partner'], self::$systemConfig['alipay_key'], self::$systemConfig['alipay_private_key']);
+                $result = $alipaySubmit->buildRequestForm($parameter, "post", "确认");
+            }
+
+            $payment = new Payment();
+            $payment->sn = $sn;
+            $payment->user_id = Auth::user()->id;
+            $payment->oid = $order->oid;
+            $payment->order_sn = $orderSn;
+            $payment->pay_way = 1;
+            $payment->amount = $amount;
+            if (self::$systemConfig['is_youzan']) {
+                $payment->qr_id = $result['response']['qr_id'];
+                $payment->qr_url = $result['response']['qr_url'];
+                $payment->qr_code = $result['response']['qr_code'];
+                $payment->qr_local_url = $this->base64ImageSaver($result['response']['qr_code']);
+            } elseif (self::$systemConfig['is_alipay']) {
+                $payment->qr_code = $result;
+            }
+            $payment->status = 0;
+            $payment->save();
+
+            // 优惠券置为已使用
+            if (!empty($coupon)) {
+                if ($coupon->usage == 1) {
+                    $coupon->status = 1;
+                    $coupon->save();
+                }
+
+                Helpers::addCouponLog($coupon->id, $goods_id, $order->oid, '在线支付使用');
+            }
+
+            DB::commit();
+	    
+            if (self::$systemConfig['is_alipay']) {
+                // Alipay返回支付信息
+                return Response::json(['status' => 'success', 'data' => $result, 'message' => '创建订单成功，正在转到付款页面，请稍后']);
+            } else {
+                return Response::json(['status' => 'success', 'data' => $sn, 'message' => '创建订单成功，正在转到付款页面，请稍后']);
+            }
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            Log::error('创建支付订单失败：' . $e->getMessage());
+
+            return Response::json(['status' => 'fail', 'data' => '', 'message' => '创建订单失败：' . $e->getMessage()]);
         }
     }
 
-    // 取消支付
-    public function cancel(Request $request)
+    // 支付单详情
+    public function detail(Request $request, $sn)
     {
-        var_dump($request->all());
+        if (empty($sn)) {
+            return Redirect::to('services');
+        }
 
-        echo '取消支付';
+        $payment = Payment::query()->with(['order', 'order.goods'])->where('sn', $sn)->where('user_id', Auth::user()->id)->first();
+        if (!$payment) {
+            return Redirect::to('services');
+        }
+
+        $order = Order::query()->where('oid', $payment->oid)->first();
+        if (!$order) {
+            \Session::flash('errorMsg', '订单不存在');
+
+            return Response::view('payment/' . $sn);
+        }
+
+        $view['payment'] = $payment;
+        $view['website_logo'] = self::$systemConfig['website_logo'];
+        $view['website_analytics'] = self::$systemConfig['website_analytics'];
+        $view['website_customer_service'] = self::$systemConfig['website_customer_service'];
+        $view['is_alipay'] = self::$systemConfig['is_alipay'];
+
+        return Response::view('payment.detail', $view);
     }
 
-    // 查询支付状态
-    public function query()
+    // 获取订单支付状态
+    public function getStatus(Request $request)
     {
+        $sn = $request->get('sn');
 
+        if (empty($sn)) {
+            return Response::json(['status' => 'fail', 'data' => '', 'message' => '请求失败']);
+        }
+
+        $payment = Payment::query()->where('sn', $sn)->where('user_id', Auth::user()->id)->first();
+        if (!$payment) {
+            return Response::json(['status' => 'error', 'data' => '', 'message' => '支付失败']);
+        } elseif ($payment->status > 0) {
+            return Response::json(['status' => 'success', 'data' => '', 'message' => '支付成功']);
+        } elseif ($payment->status < 0) {
+            return Response::json(['status' => 'error', 'data' => '', 'message' => '订单超时未支付，已自动关闭']);
+        } else {
+            return Response::json(['status' => 'fail', 'data' => '', 'message' => '等待支付']);
+        }
     }
 
-    // 写入日志
-    private function log($oid, $invoice_number = '', $items = '', $response_data = '', $error = '')
+    // 有赞云回调日志
+    public function callbackList(Request $request)
     {
-        $paypal = new Paypal();
-        $paypal->oid = $oid;
-        $paypal->invoice_number = $invoice_number;
-        $paypal->items = $items;
-        $paypal->response_data = $response_data;
-        $paypal->error = $error;
-        $paypal->save();
+        $status = $request->get('status', 0);
 
-        return $paypal->id;
+        $query = PaymentCallback::query();
+
+        if ($status) {
+            $query->where('status', $status);
+        }
+
+        $view['list'] = $query->orderBy('id', 'desc')->paginate(10);
+
+        return Response::view('payment.callbackList', $view);
     }
 }

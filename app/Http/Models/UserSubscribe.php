@@ -7,20 +7,15 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * 用户订阅地址
  * Class UserSubscribe
+ *
  * @package App\Http\Models
+ * @property-read \App\Http\Models\User $User
+ * @mixin \Eloquent
  */
 class UserSubscribe extends Model
 {
     protected $table = 'user_subscribe';
     protected $primaryKey = 'id';
-    protected $fillable = [
-        'user_id',
-        'code',
-        'times',
-        'status',
-        'ban_time',
-        'ban_desc',
-    ];
 
     public function User()
     {

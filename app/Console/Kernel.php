@@ -13,61 +13,56 @@ class Kernel extends ConsoleKernel
      * @var array
      */
     protected $commands = [
-        \App\Console\Commands\AutoBanSubscribeJob::class,
-        \App\Console\Commands\AutoBanUserJob::class,
-        \App\Console\Commands\AutoCheckNodeStatusJob::class,
-        \App\Console\Commands\AutoClearLogJob::class,
-        \App\Console\Commands\AutoDecGoodsTrafficJob::class,
-        \App\Console\Commands\AutoDisableExpireUserJob::class,
-        \App\Console\Commands\AutoDisableUserJob::class,
-        \App\Console\Commands\AutoExpireCouponJob::class,
-        \App\Console\Commands\AutoExpireInviteJob::class,
-        \App\Console\Commands\AutoGetLocationInfoJob::class,
-        \App\Console\Commands\AutoReopenUserJob::class,
-        \App\Console\Commands\AutoResetUserTrafficJob::class,
-        \App\Console\Commands\AutoStatisticsNodeDailyTrafficJob::class,
-        \App\Console\Commands\AutoStatisticsNodeHourlyTrafficJob::class,
-        \App\Console\Commands\AutoStatisticsUserDailyTrafficJob::class,
-        \App\Console\Commands\AutoStatisticsUserHourlyTrafficJob::class,
-        \App\Console\Commands\UserExpireWarningJob::class,
-        \App\Console\Commands\UserTrafficWarningJob::class,
+        \App\Console\Commands\AutoJob::class,
+        \App\Console\Commands\AutoClearLog::class,
+        \App\Console\Commands\AutoDecGoodsTraffic::class,
+        \App\Console\Commands\AutoResetUserTraffic::class,
+        \App\Console\Commands\AutoCheckNodeStatus::class,
+        \App\Console\Commands\AutoStatisticsNodeDailyTraffic::class,
+        \App\Console\Commands\AutoStatisticsNodeHourlyTraffic::class,
+        \App\Console\Commands\AutoStatisticsUserDailyTraffic::class,
+        \App\Console\Commands\AutoStatisticsUserHourlyTraffic::class,
+        \App\Console\Commands\UserTrafficAbnormalAutoWarning::class,
+        \App\Console\Commands\UserExpireAutoWarning::class,
+        \App\Console\Commands\UserTrafficAutoWarning::class,
+        \App\Console\Commands\upgradeUserPassword::class,
+        \App\Console\Commands\upgradeUserVmessId::class,
+        \App\Console\Commands\AutoReportNode::class,
     ];
 
     /**
      * Define the application's command schedule.
      *
-     * @param  \Illuminate\Console\Scheduling\Schedule  $schedule
+     * @param  \Illuminate\Console\Scheduling\Schedule $schedule
+     *
      * @return void
      */
     protected function schedule(Schedule $schedule)
     {
-        $schedule->command('command:autoBanSubscribeJob')->everyThirtyMinutes();
-        $schedule->command('command:autoBanUserJob')->everyTenMinutes();
-        $schedule->command('command:autoCheckNodeStatusJob')->everyMinute();
-        $schedule->command('command:autoClearLogJob')->everyThirtyMinutes();
-        $schedule->command('command:autoDecGoodsTrafficJob')->everyTenMinutes();
-        $schedule->command('command:autoDisableExpireUserJob')->everyMinute();
-        $schedule->command('command:autoDisableUserJob')->everyMinute();
-        $schedule->command('command:autoExpireCouponJob')->everyThirtyMinutes();
-        $schedule->command('command:autoExpireInviteJob')->everyThirtyMinutes();
-        //$schedule->command('command:autoGetLocationInfoJob')->everyMinute();
-        $schedule->command('command:autoReopenUserJob')->everyMinute();
-        $schedule->command('command:autoResetUserTrafficJob')->everyFiveMinutes();
-        $schedule->command('command:autoStatisticsNodeDailyTrafficJob')->dailyAt('04:30');
-        $schedule->command('command:autoStatisticsNodeHourlyTrafficJob')->hourly();
-        $schedule->command('command:autoStatisticsUserDailyTrafficJob')->dailyAt('03:00');
-        $schedule->command('command:autoStatisticsUserHourlyTrafficJob')->hourly();
-        $schedule->command('command:userExpireWarningJob')->daily();
-        $schedule->command('command:userTrafficWarningJob')->daily();
+        $schedule->command('autoJob')->everyMinute();
+        $schedule->command('autoClearLog')->everyThirtyMinutes();
+        $schedule->command('autoDecGoodsTraffic')->everyTenMinutes();
+        $schedule->command('autoResetUserTraffic')->daily();
+        $schedule->command('autoCheckNodeStatus')->everyMinute();
+        $schedule->command('autoStatisticsNodeDailyTraffic')->dailyAt('23:55');
+        $schedule->command('autoStatisticsNodeHourlyTraffic')->hourly();
+        $schedule->command('autoStatisticsUserDailyTraffic')->dailyAt('23:50');
+        $schedule->command('autoStatisticsUserHourlyTraffic')->hourly();
+        $schedule->command('userTrafficAbnormalAutoWarning')->hourly();
+        $schedule->command('userExpireAutoWarning')->dailyAt('20:00');
+        $schedule->command('userTrafficAutoWarning')->dailyAt('10:30');
+        $schedule->command('autoReportNode')->dailyAt('09:00');
     }
 
     /**
-     * Register the Closure based commands for the application.
+     * Register the commands for the application.
      *
      * @return void
      */
     protected function commands()
     {
+        $this->load(__DIR__.'/Commands');
+
         require base_path('routes/console.php');
     }
 }

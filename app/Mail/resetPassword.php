@@ -7,23 +7,20 @@ use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Contracts\Queue\ShouldQueue;
 
-class resetPassword extends Mailable
+class resetPassword extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 
-    protected $websiteName;
     protected $resetPasswordUrl;
 
-    public function __construct($websiteName, $resetPasswordUrl)
+    public function __construct($resetPasswordUrl)
     {
-        $this->websiteName = $websiteName;
         $this->resetPasswordUrl = $resetPasswordUrl;
     }
 
     public function build()
     {
         return $this->view('emails.resetPassword')->subject('重置密码')->with([
-            'websiteName'      => $this->websiteName,
             'resetPasswordUrl' => $this->resetPasswordUrl
         ]);
     }

@@ -7,19 +7,15 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * 工单回复
  * Class TicketReply
+ *
  * @package App\Http\Models
+ * @property-read \App\Http\Models\User $User
+ * @mixin \Eloquent
  */
 class TicketReply extends Model
 {
     protected $table = 'ticket_reply';
     protected $primaryKey = 'id';
-    public $timestamps = false;
-    protected $fillable = [
-        'ticket_id',
-        'user_id',
-        'content',
-        'created_at'
-    ];
 
     public function User()
     {

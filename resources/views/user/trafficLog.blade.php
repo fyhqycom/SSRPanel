@@ -1,9 +1,6 @@
 @extends('user.layouts')
-
 @section('css')
 @endsection
-
-@section('title', trans('home.panel'))
 @section('content')
     <!-- BEGIN CONTENT BODY -->
     <div class="page-content" style="padding-top:0;">
@@ -46,7 +43,7 @@
         option = {
             title: {
                 text: '{{trans('home.traffic_log_30days')}}',
-                subtext: '单位M'
+                subtext: '{{trans('home.traffic_log_unit')}}'
             },
             tooltip: {
                 trigger: 'axis'
@@ -60,12 +57,12 @@
             xAxis: {
                 type: 'category',
                 boundaryGap: false,
-                data: ['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20','21','22','23','24','25','26','27','28','29','30']
+                data: [{!! $monthDays !!}]
             },
             yAxis: {
                 type: 'value',
                 axisLabel: {
-                    formatter: '{value} M'
+                    formatter: '{value} G'
                 }
             },
             series: [
@@ -76,7 +73,7 @@
                     data:[{!! $trafficDaily !!}],
                     markPoint: {
                         data: [
-                            {type: 'max', name: '最大值'}
+                            {type: 'max', name: '{{trans('home.traffic_log_max')}}'}
                         ]
                     }
                 }
@@ -92,7 +89,7 @@
         option = {
             title: {
                 text: '{{trans('home.traffic_log_24hours')}}',
-                subtext: '单位M'
+                subtext: '{{trans('home.traffic_log_unit')}}'
             },
             tooltip: {
                 trigger: 'axis'
@@ -106,12 +103,12 @@
             xAxis: {
                 type: 'category',
                 boundaryGap: false,
-                data: ['1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20','21','22','23','24']
+                data: ['0','1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20','21','22','23']
             },
             yAxis: {
                 type: 'value',
                 axisLabel: {
-                    formatter: '{value} M'
+                    formatter: '{value} G'
                 }
             },
             series: [
@@ -122,7 +119,7 @@
                     data:[{!! $trafficHourly !!}],
                     markPoint: {
                         data: [
-                            {type: 'max', name: '最大值'}
+                            {type: 'max', name: '{{trans('home.traffic_log_max')}}'}
                         ]
                     }
                 }
