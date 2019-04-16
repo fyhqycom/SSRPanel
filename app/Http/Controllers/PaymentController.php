@@ -11,11 +11,12 @@ use App\Http\Models\Order;
 use App\Http\Models\Payment;
 use App\Http\Models\PaymentCallback;
 use Illuminate\Http\Request;
+use Payment\Client\Charge;
 use Response;
-use Redirect;
 use Log;
 use DB;
 use Auth;
+use Validator;
 
 /**
  * 支付控制器
@@ -38,20 +39,19 @@ class PaymentController extends Controller
     {
         $goods_id = intval($request->get('goods_id'));
         $coupon_sn = $request->get('coupon_sn');
-        $pay_type = $request->get('pay_type');
 
-        $goods = Goods::query()->where('is_del', 0)->where('status', 1)->where('id', $goods_id)->first();
+        $goods = Goods::query()->where('status', 1)->where('id', $goods_id)->first();
         if (!$goods) {
             return Response::json(['status' => 'fail', 'data' => '', 'message' => '创建支付单失败：商品或服务已下架']);
         }
 
         // 判断是否开启有赞云支付
-        if (!self::$systemConfig['is_youzan'] && !self::$systemConfig['is_alipay']) {
+        if (!self::$systemConfig['is_youzan'] && !self::$systemConfig['is_alipay'] && !self::$systemConfig['is_f2fpay']) {
             return Response::json(['status' => 'fail', 'data' => '', 'message' => '创建支付单失败：系统并未开启在线支付功能']);
         }
 
         // 判断是否存在同个商品的未支付订单
-        $existsOrder = Order::query()->where('status', 0)->where('user_id', Auth::user()->id)->where('goods_id', $goods_id)->exists();
+        $existsOrder = Order::uid()->where('status', 0)->where('goods_id', $goods_id)->exists();
         if ($existsOrder) {
             return Response::json(['status' => 'fail', 'data' => '', 'message' => '创建支付单失败：尚有未支付的订单，请先去支付']);
         }
@@ -59,7 +59,7 @@ class PaymentController extends Controller
         // 限购控制
         $strategy = self::$systemConfig['goods_purchase_limit_strategy'];
         if ($strategy == 'all' || ($strategy == 'package' && $goods->type == 2) || ($strategy == 'free' && $goods->price == 0) || ($strategy == 'package&free' && ($goods->type == 2 || $goods->price == 0))) {
-            $noneExpireOrderExist = Order::query()->where('status', '>=', 0)->where('is_expire', 0)->where('user_id', Auth::user()->id)->where('goods_id', $goods_id)->exists();
+            $noneExpireOrderExist = Order::uid()->where('status', '>=', 0)->where('is_expire', 0)->where('goods_id', $goods_id)->exists();
             if ($noneExpireOrderExist) {
                 return Response::json(['status' => 'fail', 'data' => '', 'message' => '创建支付单失败：商品不可重复购买']);
             }
@@ -67,7 +67,7 @@ class PaymentController extends Controller
 
         // 单个商品限购
         if ($goods->is_limit == 1) {
-            $noneExpireOrderExist = Order::query()->where('status', '>=', 0)->where('user_id', Auth::user()->id)->where('goods_id', $goods_id)->exists();
+            $noneExpireOrderExist = Order::uid()->where('status', '>=', 0)->where('goods_id', $goods_id)->exists();
             if ($noneExpireOrderExist) {
                 return Response::json(['status' => 'fail', 'data' => '', 'message' => '创建支付单失败：此商品每人限购1次']);
             }
@@ -75,14 +75,14 @@ class PaymentController extends Controller
 
         // 使用优惠券
         if ($coupon_sn) {
-            $coupon = Coupon::query()->where('status', 0)->where('is_del', 0)->whereIn('type', [1, 2])->where('sn', $coupon_sn)->first();
+            $coupon = Coupon::query()->where('status', 0)->whereIn('type', [1, 2])->where('sn', $coupon_sn)->first();
             if (!$coupon) {
                 return Response::json(['status' => 'fail', 'data' => '', 'message' => '创建支付单失败：优惠券不存在']);
             }
 
             // 计算实际应支付总价
             $amount = $coupon->type == 2 ? $goods->price * $coupon->discount / 10 : $goods->price - $coupon->amount;
-            $amount = $amount > 0 ? $amount : 0;
+            $amount = $amount > 0 ? round($amount, 2) : 0; // 四舍五入保留2位小数，避免无法正常创建订单
         } else {
             $amount = $goods->price;
         }
@@ -96,12 +96,11 @@ class PaymentController extends Controller
 
         // 验证账号是否存在有效期更长的套餐
         if ($goods->type == 2) {
-            $existOrderList = Order::query()
+            $existOrderList = Order::uid()
                 ->with(['goods'])
                 ->whereHas('goods', function ($q) {
                     $q->where('type', 2);
                 })
-                ->where('user_id', Auth::user()->id)
                 ->where('is_expire', 0)
                 ->where('status', 2)
                 ->get();
@@ -123,6 +122,8 @@ class PaymentController extends Controller
                 $pay_way = 2;
             } elseif (self::$systemConfig['is_alipay']) {
                 $pay_way = 4;
+            } elseif (self::$systemConfig['is_f2fpay']) {
+                $pay_way = 5;
             }
 
             // 生成订单
@@ -167,6 +168,25 @@ class PaymentController extends Controller
                 // 建立请求
                 $alipaySubmit = new AlipaySubmit(self::$systemConfig['alipay_sign_type'], self::$systemConfig['alipay_partner'], self::$systemConfig['alipay_key'], self::$systemConfig['alipay_private_key']);
                 $result = $alipaySubmit->buildRequestForm($parameter, "post", "确认");
+            } elseif (self::$systemConfig['is_f2fpay']) {
+                // TODO：goods表里增加一个字段用于自定义商品付款时展示的商品名称，
+                // TODO：这里增加一个随机商品列表，根据goods的价格随机取值
+                $result = Charge::run("ali_qr", [
+                    'use_sandbox'     => false,
+                    "partner"         => self::$systemConfig['f2fpay_app_id'],
+                    'app_id'          => self::$systemConfig['f2fpay_app_id'],
+                    'sign_type'       => 'RSA2',
+                    'ali_public_key'  => self::$systemConfig['f2fpay_public_key'],
+                    'rsa_private_key' => self::$systemConfig['f2fpay_private_key'],
+                    'notify_url'      => self::$systemConfig['website_url'] . "/api/f2fpay", // 异步回调接口
+                    'return_url'      => self::$systemConfig['website_url'],
+                    'return_raw'      => false
+                ], [
+                    'body'     => '',
+                    'subject'  => self::$systemConfig['f2fpay_subject_name'],
+                    'order_no' => $orderSn,
+                    'amount'   => $amount,
+                ]);
             }
 
             $payment = new Payment();
@@ -183,6 +203,10 @@ class PaymentController extends Controller
                 $payment->qr_local_url = $this->base64ImageSaver($result['response']['qr_code']);
             } elseif (self::$systemConfig['is_alipay']) {
                 $payment->qr_code = $result;
+            } elseif (self::$systemConfig['is_f2fpay']) {
+                $payment->qr_code = $result;
+                $payment->qr_url = 'http://qr.topscan.com/api.php?text=' . $result . '&bg=ffffff&fg=000000&pt=1c73bd&m=10&w=400&el=1&inpt=1eabfc&logo=https://t.alipayobjects.com/tfscom/T1Z5XfXdxmXXXXXXXX.png';
+                $payment->qr_local_url = $payment->qr_url;
             }
             $payment->status = 0;
             $payment->save();
@@ -198,9 +222,8 @@ class PaymentController extends Controller
             }
 
             DB::commit();
-	    
-            if (self::$systemConfig['is_alipay']) {
-                // Alipay返回支付信息
+
+            if (self::$systemConfig['is_alipay']) { // Alipay返回支付信息
                 return Response::json(['status' => 'success', 'data' => $result, 'message' => '创建订单成功，正在转到付款页面，请稍后']);
             } else {
                 return Response::json(['status' => 'success', 'data' => $sn, 'message' => '创建订单成功，正在转到付款页面，请稍后']);
@@ -217,27 +240,7 @@ class PaymentController extends Controller
     // 支付单详情
     public function detail(Request $request, $sn)
     {
-        if (empty($sn)) {
-            return Redirect::to('services');
-        }
-
-        $payment = Payment::query()->with(['order', 'order.goods'])->where('sn', $sn)->where('user_id', Auth::user()->id)->first();
-        if (!$payment) {
-            return Redirect::to('services');
-        }
-
-        $order = Order::query()->where('oid', $payment->oid)->first();
-        if (!$order) {
-            \Session::flash('errorMsg', '订单不存在');
-
-            return Response::view('payment/' . $sn);
-        }
-
-        $view['payment'] = $payment;
-        $view['website_logo'] = self::$systemConfig['website_logo'];
-        $view['website_analytics'] = self::$systemConfig['website_analytics'];
-        $view['website_customer_service'] = self::$systemConfig['website_customer_service'];
-        $view['is_alipay'] = self::$systemConfig['is_alipay'];
+        $view['payment'] = Payment::uid()->with(['order', 'order.goods'])->where('sn', $sn)->firstOrFail();
 
         return Response::view('payment.detail', $view);
     }
@@ -245,16 +248,19 @@ class PaymentController extends Controller
     // 获取订单支付状态
     public function getStatus(Request $request)
     {
-        $sn = $request->get('sn');
+        $validator = Validator::make($request->all(), [
+            'sn' => 'required|exists:payment,sn'
+        ], [
+            'sn.required' => '请求失败：缺少sn',
+            'sn.exists'   => '支付失败：支付单不存在'
+        ]);
 
-        if (empty($sn)) {
-            return Response::json(['status' => 'fail', 'data' => '', 'message' => '请求失败']);
+        if ($validator->fails()) {
+            return Response::json(['status' => 'error', 'data' => '', 'message' => $validator->getMessageBag()->first()]);
         }
 
-        $payment = Payment::query()->where('sn', $sn)->where('user_id', Auth::user()->id)->first();
-        if (!$payment) {
-            return Response::json(['status' => 'error', 'data' => '', 'message' => '支付失败']);
-        } elseif ($payment->status > 0) {
+        $payment = Payment::uid()->where('sn', $request->sn)->first();
+        if ($payment->status > 0) {
             return Response::json(['status' => 'success', 'data' => '', 'message' => '支付成功']);
         } elseif ($payment->status < 0) {
             return Response::json(['status' => 'error', 'data' => '', 'message' => '订单超时未支付，已自动关闭']);
@@ -263,7 +269,7 @@ class PaymentController extends Controller
         }
     }
 
-    // 有赞云回调日志
+    // 回调日志
     public function callbackList(Request $request)
     {
         $status = $request->get('status', 0);

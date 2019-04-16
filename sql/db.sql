@@ -33,10 +33,10 @@ CREATE TABLE `ss_node` (
   `ip` CHAR(15) NULL DEFAULT '' COMMENT '服务器IPV4地址',
   `ipv6` CHAR(128) NULL DEFAULT '' COMMENT '服务器IPV6地址',
   `desc` VARCHAR(255) NULL DEFAULT '' COMMENT '节点简单描述',
-  `method` VARCHAR(32) NOT NULL DEFAULT 'aes-192-ctr' COMMENT '加密方式',
-  `protocol` VARCHAR(128) NOT NULL DEFAULT 'auth_chain_a' COMMENT '协议',
+  `method` VARCHAR(32) NOT NULL DEFAULT 'aes-256-cfb' COMMENT '加密方式',
+  `protocol` VARCHAR(128) NOT NULL DEFAULT 'origin' COMMENT '协议',
   `protocol_param` VARCHAR(128) NULL DEFAULT '' COMMENT '协议参数',
-  `obfs` VARCHAR(128) NOT NULL DEFAULT 'tls1.2_ticket_auth' COMMENT '混淆',
+  `obfs` VARCHAR(128) NOT NULL DEFAULT 'plain' COMMENT '混淆',
   `obfs_param` VARCHAR(128) NULL DEFAULT '' COMMENT '混淆参数',
   `traffic_rate` FLOAT NOT NULL DEFAULT '1.00' COMMENT '流量比率',
   `bandwidth` INT(11) NOT NULL DEFAULT '100' COMMENT '出口带宽，单位M',
@@ -44,11 +44,11 @@ CREATE TABLE `ss_node` (
   `monitor_url` VARCHAR(255) NULL DEFAULT NULL COMMENT '监控地址',
   `is_subscribe` TINYINT(4) NULL DEFAULT '1' COMMENT '是否允许用户订阅该节点：0-否、1-是',
   `is_nat` TINYINT(4) NOT NULL DEFAULT '0' COMMENT '是否为NAT机：0-否、1-是',
-  `is_udp` TINYINT(4) NOT NULL DEFAULT '1' COMMENT '是否允许UDP：0-否、1-是',
+  `is_transit` TINYINT(4) NOT NULL DEFAULT '0' COMMENT '是否中转节点：0-否、1-是',
   `ssh_port` SMALLINT(6) UNSIGNED NOT NULL DEFAULT '22' COMMENT 'SSH端口',
   `is_tcp_check` TINYINT(4) NOT NULL DEFAULT '1' COMMENT '是否开启检测: 0-不开启、1-开启',
-  `compatible` TINYINT(4) NULL DEFAULT '0' COMMENT '兼容SS',
-  `single` TINYINT(4) NULL DEFAULT '0' COMMENT '单端口多用户：0-否、1-是',
+  `compatible` TINYINT(4) NOT NULL DEFAULT '0' COMMENT '兼容SS',
+  `single` TINYINT(4) NOT NULL DEFAULT '0' COMMENT '单端口多用户：0-否、1-是',
   `single_force` TINYINT(4) NULL DEFAULT NULL COMMENT '模式：0-兼容模式、1-严格模式',
   `single_port` VARCHAR(50) NULL DEFAULT '' COMMENT '端口号，用,号分隔',
   `single_passwd` VARCHAR(50) NULL DEFAULT '' COMMENT '密码',
@@ -65,8 +65,10 @@ CREATE TABLE `ss_node` (
   `v2_host` VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'V2ray伪装的域名',
   `v2_path` VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'V2ray WS/H2路径',
   `v2_tls` TINYINT(4) NOT NULL DEFAULT '0' COMMENT 'V2ray底层传输安全 0 未开启 1 开启',
-  `created_at` DATETIME NOT NULL,
-  `updated_at` DATETIME NOT NULL,
+  `v2_insider_port` INT(11) NOT NULL DEFAULT '10550' COMMENT 'V2ray内部端口（内部监听），v2_port为0时有效',
+  `v2_outsider_port` INT(11) NOT NULL DEFAULT '443' COMMENT 'V2ray外部端口（外部覆盖），v2_port为0时有效',
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
   PRIMARY KEY (`id`),
   INDEX `idx_group` (`group_id`),
 	INDEX `idx_sub` (`is_subscribe`)
@@ -119,28 +121,27 @@ CREATE TABLE `user` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `username` varchar(128) NOT NULL DEFAULT '' COMMENT '用户名',
   `password` varchar(64) NOT NULL DEFAULT '' COMMENT '密码',
-  `port` int(11) NOT NULL DEFAULT '0' COMMENT 'SS端口',
-  `passwd` varchar(16) NOT NULL DEFAULT '' COMMENT 'SS密码',
-  `vmess_id` varchar(64) NOT NULL DEFAULT '' COMMENT 'V2ray用户ID',
-  `transfer_enable` bigint(20) NOT NULL DEFAULT '1073741824000' COMMENT '可用流量，单位字节，默认1TiB',
+  `port` int(11) NOT NULL DEFAULT '0' COMMENT '代理端口',
+  `passwd` varchar(16) NOT NULL DEFAULT '' COMMENT '代理密码',
+  `vmess_id` varchar(64) NOT NULL DEFAULT '' COMMENT 'V2Ray用户ID',
+  `transfer_enable` bigint(20) NOT NULL DEFAULT '1099511627776' COMMENT '可用流量，单位字节，默认1TiB',
   `u` bigint(20) NOT NULL DEFAULT '0' COMMENT '已上传流量，单位字节',
   `d` bigint(20) NOT NULL DEFAULT '0' COMMENT '已下载流量，单位字节',
   `t` int(11) NOT NULL DEFAULT '0' COMMENT '最后使用时间',
-  `enable` tinyint(4) NOT NULL DEFAULT '1' COMMENT 'SS状态',
+  `enable` tinyint(4) NOT NULL DEFAULT '1' COMMENT '代理状态',
   `method` varchar(30) NOT NULL DEFAULT 'aes-256-cfb' COMMENT '加密方式',
   `protocol` varchar(30) NOT NULL DEFAULT 'origin' COMMENT '协议',
   `protocol_param` varchar(255) DEFAULT '' COMMENT '协议参数',
   `obfs` varchar(30) NOT NULL DEFAULT 'plain' COMMENT '混淆',
   `obfs_param` varchar(255) DEFAULT '' COMMENT '混淆参数',
-  `speed_limit_per_con` bigint(20) NOT NULL DEFAULT '10737418240' COMMENT '单连接限速，默认10M，为0表示不限速，单位Byte',
-  `speed_limit_per_user` bigint(20) NOT NULL DEFAULT '10737418240' COMMENT '单用户限速，默认10M，为0表示不限速，单位Byte',
+  `speed_limit_per_con` bigint(20) NOT NULL DEFAULT '10737418240' COMMENT '单连接限速，默认10G，为0表示不限速，单位Byte',
+  `speed_limit_per_user` bigint(20) NOT NULL DEFAULT '10737418240' COMMENT '单用户限速，默认10G，为0表示不限速，单位Byte',
   `gender` tinyint(4) NOT NULL DEFAULT '1' COMMENT '性别：0-女、1-男',
   `wechat` varchar(30) DEFAULT '' COMMENT '微信',
   `qq` varchar(20) DEFAULT '' COMMENT 'QQ',
   `usage` VARCHAR(10) NOT NULL DEFAULT '4' COMMENT '用途：1-手机、2-电脑、3-路由器、4-其他',
   `pay_way` tinyint(4) NOT NULL DEFAULT '0' COMMENT '付费方式：0-免费、1-季付、2-月付、3-半年付、4-年付',
   `balance` int(11) NOT NULL DEFAULT '0' COMMENT '余额，单位分',
-  `score` int(11) NOT NULL DEFAULT '0' COMMENT '积分',
   `enable_time` date DEFAULT NULL COMMENT '开通日期',
   `expire_time` date NOT NULL DEFAULT '2099-01-01' COMMENT '过期时间',
   `ban_time` int(11) NOT NULL DEFAULT '0' COMMENT '封禁到期时间',
@@ -185,13 +186,10 @@ CREATE TABLE `level` (
 -- ----------------------------
 -- Records of `level`
 -- ----------------------------
-INSERT INTO `level` VALUES (1, '1', '青铜');
-INSERT INTO `level` VALUES (2, '2', '白银');
-INSERT INTO `level` VALUES (3, '3', '黄金');
-INSERT INTO `level` VALUES (4, '4', '铂金');
-INSERT INTO `level` VALUES (5, '5', '钻石');
-INSERT INTO `level` VALUES (6, '6', '星耀');
-INSERT INTO `level` VALUES (7, '7', '王者');
+INSERT INTO `level` VALUES (1, '1', '普通用户');
+INSERT INTO `level` VALUES (2, '2', 'VIP1');
+INSERT INTO `level` VALUES (3, '3', 'VIP2');
+INSERT INTO `level` VALUES (4, '4', 'VIP3');
 
 
 -- ----------------------------
@@ -292,15 +290,15 @@ INSERT INTO `config` VALUES ('5', 'is_invite_register', 2);
 INSERT INTO `config` VALUES ('6', 'website_name', 'SSRPanel');
 INSERT INTO `config` VALUES ('7', 'is_reset_password', 1);
 INSERT INTO `config` VALUES ('8', 'reset_password_times', 3);
-INSERT INTO `config` VALUES ('9', 'website_url', 'http://www.ssrpanel.com');
+INSERT INTO `config` VALUES ('9', 'website_url', 'https://www.ssrpanel.com');
 INSERT INTO `config` VALUES ('10', 'is_active_register', 1);
 INSERT INTO `config` VALUES ('11', 'active_times', 3);
-INSERT INTO `config` VALUES ('12', 'login_add_score', 1);
-INSERT INTO `config` VALUES ('13', 'min_rand_score', 1);
-INSERT INTO `config` VALUES ('14', 'max_rand_score', 100);
+INSERT INTO `config` VALUES ('12', 'is_checkin', 1);
+INSERT INTO `config` VALUES ('13', 'min_rand_traffic', 10);
+INSERT INTO `config` VALUES ('14', 'max_rand_traffic', 500);
 INSERT INTO `config` VALUES ('15', 'wechat_qrcode', '');
 INSERT INTO `config` VALUES ('16', 'alipay_qrcode', '');
-INSERT INTO `config` VALUES ('17', 'login_add_score_range', 1440);
+INSERT INTO `config` VALUES ('17', 'traffic_limit_time', 1440);
 INSERT INTO `config` VALUES ('18', 'referral_traffic', 1024);
 INSERT INTO `config` VALUES ('19', 'referral_percent', 0.2);
 INSERT INTO `config` VALUES ('20', 'referral_money', 100);
@@ -356,10 +354,10 @@ INSERT INTO `config` VALUES ('69', 'is_forbid_china', 0);
 INSERT INTO `config` VALUES ('70', 'is_forbid_oversea', 0);
 INSERT INTO `config` VALUES ('71', 'is_verify_register', 0);
 INSERT INTO `config` VALUES ('72', 'node_daily_report', 0);
-INSERT INTO `config` values ('73', 'mix_subscribe', 0);
-INSERT INTO `config` values ('74', 'rand_subscribe', 0);
-INSERT INTO `config` values ('75', 'is_custom_subscribe', 0);
-INSERT INTO `config` values ('76', 'is_alipay', 0);
+INSERT INTO `config` VALUES ('73', 'mix_subscribe', 0);
+INSERT INTO `config` VALUES ('74', 'rand_subscribe', 0);
+INSERT INTO `config` VALUES ('75', 'is_custom_subscribe', 0);
+INSERT INTO `config` VALUES ('76', 'is_alipay', 0);
 INSERT INTO `config` VALUES ('77', 'alipay_sign_type', 'MD5');
 INSERT INTO `config` VALUES ('78', 'alipay_partner', '');
 INSERT INTO `config` VALUES ('79', 'alipay_key', '');
@@ -367,6 +365,19 @@ INSERT INTO `config` VALUES ('80', 'alipay_private_key', '');
 INSERT INTO `config` VALUES ('81', 'alipay_public_key', '');
 INSERT INTO `config` VALUES ('82', 'alipay_transport', 'http');
 INSERT INTO `config` VALUES ('83', 'alipay_currency', 'USD');
+INSERT INTO `config` VALUES ('84', 'is_f2fpay', 0);
+INSERT INTO `config` VALUES ('85', 'f2fpay_app_id', '');
+INSERT INTO `config` VALUES ('86', 'f2fpay_private_key', '');
+INSERT INTO `config` VALUES ('87', 'f2fpay_public_key', '');
+INSERT INTO `config` VALUES ('88', 'website_security_code', '');
+INSERT INTO `config` VALUES ('89', 'f2fpay_subject_name', '');
+INSERT INTO `config` VALUES ('90', 'geetest_id', '');
+INSERT INTO `config` VALUES ('91', 'geetest_key', '');
+INSERT INTO `config` VALUES ('92', 'google_captcha_sitekey', '');
+INSERT INTO `config` VALUES ('93', 'google_captcha_secret', '');
+INSERT INTO `config` VALUES ('94', 'user_invite_days', 7);
+INSERT INTO `config` VALUES ('95', 'admin_invite_days', 7);
+
 
 -- ----------------------------
 -- Table structure for `article`
@@ -378,13 +389,20 @@ CREATE TABLE `article` (
   `summary` varchar(255) DEFAULT '' COMMENT '简介',
   `logo` varchar(255) DEFAULT '' COMMENT 'LOGO',
   `content` text COMMENT '内容',
-  `type` tinyint(4) DEFAULT '1' COMMENT '类型：1-文章、2-公告',
-  `is_del` tinyint(4) NOT NULL DEFAULT '0' COMMENT '是否删除',
+  `type` tinyint(4) DEFAULT '1' COMMENT '类型：1-文章、2-公告、3-购买说明、4-使用教程',
   `sort` int(11) NOT NULL DEFAULT '0' COMMENT '排序',
   `created_at` datetime DEFAULT NULL COMMENT '创建时间',
   `updated_at` datetime DEFAULT NULL COMMENT '最后更新时间',
+  `deleted_at` datetime NULL DEFAULT NULL COMMENT '删除时间',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文章';
+
+
+-- ----------------------------
+-- Records of article
+-- ----------------------------
+INSERT INTO article(title, author, content, type, sort)
+VALUES('购买说明', '管理员', '<h4>购买流程：</h4><ol class=" list-paddingleft-2"><li><p>第一步：先购买基础套餐。</p></li><li><p>第二步：按需求，选择是否购买流量包。</p></li></ol><h4>基础套餐：</h4><ol class=" list-paddingleft-2"><li><p>在套餐生效的时间内，您将获得「套餐对应的网络速度」、「套餐内相应的流量」及其它特权。</p></li><li><p>基础套餐每月将会重置一次流量，重置日为购买日。</p></li><li><p>如在套餐未到期的情况下购买新套餐，则会导致旧套餐的所有配置立即失效，新套餐的配置立即生效。</p></li></ol><h4>流量包：</h4><ol class=" list-paddingleft-2"><li><p>当您在基础套餐重置日之前将流量耗尽，您可以选择购买流量包解燃眉之急。</p></li><li><p>流量包只在固定时间内增加可用流量，不会更改账户的配置，并且即时生效可以多个叠加。</p></li></ol>', '3', '0'), ('使用教程_Mac', '管理员', '<li> <a href=\"clients/ShadowsocksX-NG-R8-1.4.4.dmg\" target=\"_blank\">点击此处</a>下载客户端并启动 </li>\r\n<li> 点击状态栏纸飞机 -> 服务器 -> 编辑订阅 </li>\r\n<li> 点击窗口左下角 “+”号 新增订阅，完整复制本页上方“订阅服务”处地址，将其粘贴至“订阅地址”栏，点击右下角“OK” </li>\r\n<li> 点击纸飞机 -> 服务器 -> 手动更新订阅 </li>\r\n<li> 点击纸飞机 -> 服务器，选定合适服务器 </li>\r\n<li> 点击纸飞机 -> 打开Shadowsocks </li>\r\n<li> 点击纸飞机 -> PAC自动模式 </li>\r\n<li> 点击纸飞机 -> 代理设置->从 GFW List 更新 PAC </li>\r\n<li> 打开系统偏好设置 -> 网络，在窗口左侧选定显示为“已连接”的网络，点击右下角“高级...” </li>\r\n<li> 切换至“代理”选项卡，勾选“自动代理配置”和“不包括简单主机名”，点击右下角“好”，再次点击右下角“应用” </li>', '4', '1'), ('使用教程_Windows', '管理员', '<li> <a href=\"clients/ShadowsocksR-win.zip\" target=\"_blank\">点击此处</a>下载客户端并启动 </li>\r\n<li> 运行 ShadowsocksR 文件夹内的 ShadowsocksR.exe </li>\r\n<li> 右击桌面右下角状态栏（或系统托盘）纸飞机 -> 服务器订阅 -> SSR服务器订阅设置 </li>\r\n<li> 点击窗口左下角 “Add” 新增订阅，完整复制本页上方 “订阅服务” 处地址，将其粘贴至“网址”栏，点击“确定” </li>\r\n<li> 右击纸飞机 -> 服务器订阅 -> 更新SSR服务器订阅（不通过代理） </li>\r\n<li> 右击纸飞机 -> 服务器，选定合适服务器 </li>\r\n<li> 右击纸飞机 -> 系统代理模式 -> PAC模式 </li>\r\n<li> 右击纸飞机 -> PAC -> 更新PAC为GFWList </li>\r\n<li> 右击纸飞机 -> 代理规则 -> 绕过局域网和大陆 </li>\r\n<li> 右击纸飞机，取消勾选“服务器负载均衡” </li>', '4', '2'), ('使用教程_Linux', '管理员', '<li> <a href=\"clients/Shadowsocks-qt5-3.0.1.zip\" target=\"_blank\">点击此处</a>下载客户端并启动 </li>\r\n<li> 单击状态栏小飞机，找到服务器 -> 编辑订阅，复制黏贴订阅地址 </li>\r\n<li> 更新订阅设置即可 </li>', '4', '3'), ('使用教程_iOS', '管理员', '<li> 请从站长处获取 App Store 账号密码 </li>\r\n<li> 打开 Shadowrocket，点击右上角 “+”号 添加节点，类型选择 Subscribe </li>\r\n<li> 完整复制本页上方 “订阅服务” 处地址，将其粘贴至 “URL”栏，点击右上角 “完成” </li>\r\n<li> 左划新增的服务器订阅，点击 “更新” </li>\r\n<li> 选定合适服务器节点，点击右上角连接开关，屏幕上方状态栏出现“VPN”图标 </li>\r\n<li> 当进行海外游戏时请将 Shadowrocket “首页” 页面中的 “全局路由” 切换至 “代理”，并确保“设置”页面中的“UDP”已开启转发 </li>', '4', '4'), ('使用教程_Android', '管理员', '<li> <a href=\"clients/ShadowsocksRR-3.5.1.1.apk\" target=\"_blank\">点击此处</a>下载客户端并启动 </li>\r\n<li> 单击左上角的shadowsocksR进入配置文件页，点击右下角的“+”号，点击“添加/升级SSR订阅”，完整复制本页上方“订阅服务”处地址，填入订阅信息并保存 </li>\r\n<li> 选中任意一个节点，返回软件首页 </li>\r\n<li> 在软件首页处找到“路由”选项，并将其改为“绕过局域网及中国大陆地址” </li>\r\n<li> 点击右上角的小飞机图标进行连接，提示是否添加（或创建）VPN连接，点同意（或允许） </li>', '4', '5'), ('使用教程_Games', '管理员', '<li> <a href=\"clients/SSTap-beta-setup-1.0.9.7.zip\" target=\"_blank\">点击此处</a>下载客户端并安装 </li>\r\n<li> 打开 SSTap，选择 <i class=\"fa fa-cog\"></i> -> SSR订阅 -> SSR订阅管理，添加订阅地址 </li>\r\n<li> 添加完成后，再次选择 <i class=\"fa fa-cog\"></i> - SSR订阅 - 手动更新SSR订阅，即可同步节点列表。</li>\r\n<li> 在代理模式中选择游戏或「不代理中国IP」，点击「连接」即可加速。</li>\r\n<li> 需要注意的是，一旦连接成功，客户端会自动缩小到任务栏，可在设置中关闭。</li>', '4', '6');
 
 
 -- ----------------------------
@@ -399,6 +417,7 @@ CREATE TABLE `invite` (
   `dateline` datetime DEFAULT NULL COMMENT '有效期至',
   `created_at` datetime DEFAULT NULL,
   `updated_at` datetime DEFAULT NULL,
+  `deleted_at` datetime DEFAULT NULL COMMENT '删除时间',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='邀请码表';
 
@@ -486,8 +505,7 @@ CREATE TABLE `goods` (
   `sku` varchar(15) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '' COMMENT '商品服务SKU',
   `name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '' COMMENT '商品名称',
   `logo` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '' COMMENT '商品图片地址',
-  `traffic` bigint(20) NOT NULL DEFAULT '0' COMMENT '商品内含多少流量，单位Mib',
-  `score` int(11) NOT NULL DEFAULT '0' COMMENT '商品价值多少积分',
+  `traffic` bigint(20) NOT NULL DEFAULT '0' COMMENT '商品内含多少流量，单位MiB',
   `type` tinyint(4) NOT NULL DEFAULT '1' COMMENT '商品类型：1-流量包、2-套餐、3-余额充值',
   `price` int(11) NOT NULL DEFAULT '0' COMMENT '商品售价，单位分',
   `desc` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT '' COMMENT '商品描述',
@@ -496,10 +514,10 @@ CREATE TABLE `goods` (
   `sort` int(11) NOT NULL DEFAULT '0' COMMENT '排序',
   `is_limit` TINYINT(4) NOT NULL DEFAULT '0' COMMENT '是否限购：0-否、1-是',
   `is_hot` TINYINT(4) NOT NULL DEFAULT '0' COMMENT '是否热销：0-否、1-是',
-  `is_del` tinyint(4) NOT NULL DEFAULT '0' COMMENT '是否已删除：0-否、1-是',
   `status` tinyint(4) NOT NULL DEFAULT '1' COMMENT '状态：0-下架、1-上架',
   `created_at` datetime DEFAULT NULL COMMENT '创建时间',
   `updated_at` datetime DEFAULT NULL COMMENT '最后更新时间',
+  `deleted_at` datetime NULL DEFAULT NULL COMMENT '删除时间',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='商品';
 
@@ -518,10 +536,10 @@ CREATE TABLE `coupon` (
   `discount` decimal(10,2) NOT NULL DEFAULT '0.00' COMMENT '折扣',
   `available_start` int(11) NOT NULL DEFAULT '0' COMMENT '有效期开始',
   `available_end` int(11) NOT NULL DEFAULT '0' COMMENT '有效期结束',
-  `is_del` tinyint(4) NOT NULL DEFAULT '0' COMMENT '是否已删除：0-未删除、1-已删除',
   `status` tinyint(4) NOT NULL DEFAULT '1' COMMENT '状态：0-未使用、1-已使用、2-已失效',
   `created_at` datetime DEFAULT NULL COMMENT '创建时间',
   `updated_at` datetime DEFAULT NULL COMMENT '最后更新时间',
+  `deleted_at` datetime NULL DEFAULT NULL COMMENT '删除时间',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='优惠券';
 
@@ -613,22 +631,6 @@ CREATE TABLE `ticket_reply` (
 
 
 -- ----------------------------
--- Table structure for `user_score_log`
--- ----------------------------
-CREATE TABLE `user_score_log` (
-  `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
-  `user_id` int(11) NOT NULL DEFAULT '0' COMMENT '账号ID',
-  `before` int(11) NOT NULL DEFAULT '0' COMMENT '发生前积分',
-  `after` int(11) NOT NULL DEFAULT '0' COMMENT '发生后积分',
-  `score` int(11) NOT NULL DEFAULT '0' COMMENT '发生积分',
-  `desc` varchar(50) DEFAULT '' COMMENT '描述',
-  `created_at` datetime DEFAULT NULL COMMENT '创建日期',
-  PRIMARY KEY (`id`),
-  INDEX `idx` (`user_id`) USING BTREE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户积分变动日志';
-
-
--- ----------------------------
 -- Table structure for `user_balance_log`
 -- ----------------------------
 CREATE TABLE `user_balance_log` (
@@ -648,15 +650,15 @@ CREATE TABLE `user_balance_log` (
 -- Table structure for `user_traffic_modify_log`
 -- ----------------------------
 CREATE TABLE `user_traffic_modify_log` (
-	`id` INT(11) NOT NULL AUTO_INCREMENT,
-	`user_id` INT(11) NOT NULL DEFAULT '0' COMMENT '用户ID',
-	`order_id` INT(11) NOT NULL DEFAULT '0' COMMENT '发生的订单ID',
-	`before` BIGINT(20) NOT NULL DEFAULT '0' COMMENT '操作前流量',
-	`after` BIGINT(20) NOT NULL DEFAULT '0' COMMENT '操作后流量',
-	`desc` VARCHAR(255) NOT NULL DEFAULT '' COMMENT '描述',
-	`created_at` DATETIME NOT NULL,
-	`updated_at` DATETIME NOT NULL,
-	PRIMARY KEY (`id`)
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `user_id` int(11) NOT NULL DEFAULT '0' COMMENT '用户ID',
+  `order_id` int(11) NOT NULL DEFAULT '0' COMMENT '发生的订单ID',
+  `before` bigint(20) NOT NULL DEFAULT '0' COMMENT '操作前流量',
+  `after` bigint(20) NOT NULL DEFAULT '0' COMMENT '操作后流量',
+  `desc` varchar(255) NOT NULL DEFAULT '' COMMENT '描述',
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户流量变动日志';
 
 
@@ -703,9 +705,10 @@ CREATE TABLE `email_log` (
   `address` VARCHAR(255) NOT NULL COMMENT '收信地址',
   `title` VARCHAR(255) NOT NULL DEFAULT '' COMMENT '标题',
   `content` TEXT NOT NULL COMMENT '内容',
-  `status` tinyint(4) NOT NULL DEFAULT '1' COMMENT '状态：1-发送成功、2-发送失败',
+  `status` tinyint(4) NOT NULL DEFAULT '0' COMMENT '状态：-1发送失败、0-等待发送、1-发送成功',
   `error` text COMMENT '发送失败抛出的异常信息',
   `created_at` datetime DEFAULT NULL COMMENT '创建时间',
+  `updated_at` datetime DEFAULT NULL COMMENT '最后更新时间',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='邮件投递记录';
 
@@ -839,6 +842,7 @@ INSERT INTO `sensitive_words` (`words`) VALUES ('newairmail.com');
 INSERT INTO `sensitive_words` (`words`) VALUES ('temp-mail.org');
 INSERT INTO `sensitive_words` (`words`) VALUES ('linshiyouxiang.net');
 INSERT INTO `sensitive_words` (`words`) VALUES ('zwoho.com');
+INSERT INTO `sensitive_words` (`words`) VALUES ('mailboxy.fun');
 
 
 -- ----------------------------
@@ -854,7 +858,9 @@ CREATE TABLE `user_subscribe` (
   `ban_desc` varchar(50) NOT NULL DEFAULT '' COMMENT '封禁理由',
   `created_at` datetime DEFAULT NULL COMMENT '创建时间',
   `updated_at` datetime DEFAULT NULL COMMENT '最后更新时间',
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  INDEX `user_id` (`user_id`, `status`),
+  INDEX `code` (`code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户订阅';
 
 
@@ -873,7 +879,8 @@ CREATE TABLE `user_subscribe_log` (
   `request_ip` varchar(20) DEFAULT NULL COMMENT '请求IP',
   `request_time` datetime DEFAULT NULL COMMENT '请求时间',
   `request_header` text COMMENT '请求头部信息',
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  INDEX `sid` (`sid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户订阅访问日志';
 
 
@@ -1116,8 +1123,8 @@ CREATE TABLE `marketing` (
   `content` TEXT NOT NULL COMMENT '内容' COLLATE 'utf8mb4_unicode_ci',
   `error` VARCHAR(255) NULL COMMENT '错误信息' COLLATE 'utf8mb4_unicode_ci',
   `status` TINYINT(4) NOT NULL COMMENT '状态：-1-失败、0-待发送、1-成功',
-  `created_at` DATETIME NOT NULL,
-  `updated_at` DATETIME NOT NULL,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='营销';
 
@@ -1126,18 +1133,18 @@ CREATE TABLE `marketing` (
 -- Table structure for `user_login_log`
 -- ----------------------------
 CREATE TABLE `user_login_log` (
-	`id` INT(11) NOT NULL AUTO_INCREMENT,
-	`user_id` INT(11) NOT NULL DEFAULT '0',
-	`ip` CHAR(20) NOT NULL,
-	`country` CHAR(20) NOT NULL,
-	`province` CHAR(20) NOT NULL,
-	`city` CHAR(20) NOT NULL,
-	`county` CHAR(20) NOT NULL,
-	`isp` CHAR(20) NOT NULL,
-	`area` CHAR(20) NOT NULL,
-	`created_at` DATETIME NOT NULL,
-	`updated_at` DATETIME NOT NULL,
-	PRIMARY KEY (`id`)
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `user_id` INT(11) NOT NULL DEFAULT '0',
+  `ip` CHAR(20) NOT NULL,
+  `country` CHAR(20) NOT NULL,
+  `province` CHAR(20) NOT NULL,
+  `city` CHAR(20) NOT NULL,
+  `county` CHAR(20) NOT NULL,
+  `isp` CHAR(20) NOT NULL,
+  `area` CHAR(20) NOT NULL,
+  `created_at` datetime NOT NULL,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户登录日志';
 
 
@@ -1147,6 +1154,7 @@ CREATE TABLE `user_login_log` (
 CREATE TABLE `ss_node_ip` (
   `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
   `node_id` int(11) NOT NULL DEFAULT '0' COMMENT '节点ID',
+  `user_id` INT(11) NOT NULL DEFAULT '0' COMMENT '用户ID',
   `port` int(11) NOT NULL DEFAULT '0' COMMENT '端口',
   `type` char(10) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'tcp' COMMENT '类型：all、tcp、udp',
   `ip` text COLLATE utf8mb4_unicode_ci COMMENT '连接IP：每个IP用,号隔开',
@@ -1161,10 +1169,10 @@ CREATE TABLE `ss_node_ip` (
 -- Table structure for `rule`
 -- ----------------------------
 CREATE TABLE `rule` (
-	`id` INT(11) NOT NULL AUTO_INCREMENT,
-	`type` CHAR(10) NOT NULL DEFAULT 'domain' COMMENT '类型：domain-域名（单一非通配）、ipv4-IPv4地址、ipv6-IPv6地址、reg-正则表达式',
-	`regular` VARCHAR(255) NOT NULL COMMENT '规则：域名、IP、正则表达式',
-	PRIMARY KEY (`id`)
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `type` CHAR(10) NOT NULL DEFAULT 'domain' COMMENT '类型：domain-域名（单一非通配）、ipv4-IPv4地址、ipv6-IPv6地址、reg-正则表达式',
+  `regular` VARCHAR(255) NOT NULL COMMENT '规则：域名、IP、正则表达式',
+  PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='规则表';
 
 
@@ -1172,10 +1180,10 @@ CREATE TABLE `rule` (
 -- Table structure for `ss_node_deny`
 -- ----------------------------
 CREATE TABLE `ss_node_deny` (
-	`id` INT(11) NOT NULL AUTO_INCREMENT,
-	`node_id` INT(11) NOT NULL DEFAULT '0',
-	`rule_id` INT(11) NOT NULL DEFAULT '0',
-	PRIMARY KEY (`id`)
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `node_id` INT(11) NOT NULL DEFAULT '0',
+  `rule_id` INT(11) NOT NULL DEFAULT '0',
+  PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='节点访问规则关联表';
 
 
@@ -1183,13 +1191,13 @@ CREATE TABLE `ss_node_deny` (
 -- Table structure for `device`
 -- ----------------------------
 CREATE TABLE `device` (
-	`id` INT(11) NOT NULL AUTO_INCREMENT,
-	`type` TINYINT(4) NOT NULL DEFAULT '1' COMMENT '类型：0-兼容、1-Shadowsocks(R)、2-V2Ray',
-	`platform` TINYINT(4) NOT NULL DEFAULT '1' COMMENT '所属平台：0-其他、1-iOS、2-Android、3-Mac、4-Windows、5-Linux',
-	`name` VARCHAR(50) NOT NULL COMMENT '设备名称',
-	`status` TINYINT(4) NOT NULL DEFAULT '1' COMMENT '状态：0-禁止订阅、1-允许订阅',
-	`header` VARCHAR(100) NOT NULL COMMENT '请求时头部的识别特征码',
-	PRIMARY KEY (`id`)
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `type` TINYINT(4) NOT NULL DEFAULT '1' COMMENT '类型：0-兼容、1-Shadowsocks(R)、2-V2Ray',
+  `platform` TINYINT(4) NOT NULL DEFAULT '1' COMMENT '所属平台：0-其他、1-iOS、2-Android、3-Mac、4-Windows、5-Linux',
+  `name` VARCHAR(50) NOT NULL COMMENT '设备名称',
+  `status` TINYINT(4) NOT NULL DEFAULT '1' COMMENT '状态：0-禁止订阅、1-允许订阅',
+  `header` VARCHAR(100) NOT NULL COMMENT '请求时头部的识别特征码',
+  PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='设备型号表';
 
 
@@ -1197,28 +1205,28 @@ CREATE TABLE `device` (
 -- Records of `device`
 -- ----------------------------
 INSERT INTO `device` (`id`, `type`, `platform`, `name`, `status`, `header`) VALUES
-	(1, 1, 1, 'Quantumult', 1, 'Quantumult'),
-	(2, 1, 1, 'Shadowrocket', 1, 'Shadowrocket'),
-	(3, 1, 3, 'ShadowsocksX-NG-R', 1, 'ShadowsocksX-NG-R'),
-	(4, 1, 1, 'Pepi', 1, 'Pepi'),
-	(5, 1, 1, 'Potatso 2', 1, 'Potatso'),
-	(6, 1, 1, 'Potatso Lite', 1, 'Potatso'),
-	(7, 1, 4, 'ShadowsocksR', 1, 'ShadowsocksR'),
-	(8, 2, 4, 'V2RayW', 1, 'V2RayW'),
-	(9, 2, 4, 'V2RayN', 1, 'V2RayN'),
-	(10, 2, 4, 'V2RayS', 1, 'V2RayS'),
-	(11, 2, 4, 'Clash for Windows', 1, 'Clash'),
-	(12, 2, 3, 'V2RayX', 1, 'V2RayX'),
-	(13, 2, 3, 'V2RayU', 1, 'V2RayU'),
-	(14, 2, 3, 'V2RayC', 1, 'V2RayC'),
-	(15, 2, 3, 'ClashX', 1, 'ClashX'),
-	(16, 2, 1, 'Kitsunebi', 1, 'Kitsunebi'),
-	(17, 2, 1, 'Kitsunebi Lite', 1, 'Kitsunebi'),
-	(18, 2, 1, 'i2Ray', 1, 'i2Ray'),
-	(19, 2, 2, 'BifrostV', 1, 'BifrostV'),
-	(20, 2, 2, 'V2RayNG', 1, 'V2RayNG'),
-	(21, 2, 2, 'ShadowsocksR', 1, 'okhttp'),
-	(22, 2, 2, 'SSRR', 1, 'okhttp');
+  (1, 1, 1, 'Quantumult', 1, 'Quantumult'),
+  (2, 1, 1, 'Shadowrocket', 1, 'Shadowrocket'),
+  (3, 1, 3, 'ShadowsocksX-NG-R', 1, 'ShadowsocksX-NG-R'),
+  (4, 1, 1, 'Pepi', 1, 'Pepi'),
+  (5, 1, 1, 'Potatso 2', 1, 'Potatso'),
+  (6, 1, 1, 'Potatso Lite', 1, 'Potatso'),
+  (7, 1, 4, 'ShadowsocksR', 1, 'ShadowsocksR'),
+  (8, 2, 4, 'V2RayW', 1, 'V2RayW'),
+  (9, 2, 4, 'V2RayN', 1, 'V2RayN'),
+  (10, 2, 4, 'V2RayS', 1, 'V2RayS'),
+  (11, 2, 4, 'Clash for Windows', 1, 'Clash'),
+  (12, 2, 3, 'V2RayX', 1, 'V2RayX'),
+  (13, 2, 3, 'V2RayU', 1, 'V2RayU'),
+  (14, 2, 3, 'V2RayC', 1, 'V2RayC'),
+  (15, 2, 3, 'ClashX', 1, 'ClashX'),
+  (16, 2, 1, 'Kitsunebi', 1, 'Kitsunebi'),
+  (17, 2, 1, 'Kitsunebi Lite', 1, 'Kitsunebi'),
+  (18, 2, 1, 'i2Ray', 1, 'i2Ray'),
+  (19, 2, 2, 'BifrostV', 1, 'BifrostV'),
+  (20, 2, 2, 'V2RayNG', 1, 'V2RayNG'),
+  (21, 2, 2, 'ShadowsocksR', 1, 'okhttp'),
+  (22, 2, 2, 'SSRR', 1, 'okhttp');
 
 
 -- ----------------------------

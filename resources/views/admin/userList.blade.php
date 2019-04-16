@@ -80,8 +80,8 @@
                                 <thead>
                                 <tr>
                                     <th> # </th>
-                                    <th> 订阅码 </th>
                                     <th> 用户名 </th>
+                                    <th> 订阅码 </th>
                                     <th> 端口 </th>
                                     <th> 连接密码 </th>
                                     <th> 加密方式 </th>
@@ -104,8 +104,8 @@
                                         @foreach ($userList as $user)
                                             <tr class="odd gradeX {{$user->trafficWarning ? 'danger' : ''}}">
                                                 <td> {{$user->id}} </td>
-                                                <td> <a href="javascript:;" class="copySubscribeLink" data-clipboard-text="{{$user->link}}" title="点击复制订阅链接">{{$user->subscribe->code}}</a> </td>
                                                 <td> {{$user->username}} </td>
+                                                <td> <a href="javascript:;" class="copySubscribeLink" data-clipboard-text="{{$user->link}}" title="点击复制订阅链接">{{$user->subscribe->code}}</a> </td>
                                                 <td> <span class="label label-danger"> {{$user->port ? $user->port : '未分配'}} </span> </td>
                                                 <td> <span class="label label-default"> {{$user->passwd}} </span> </td>
                                                 <td> <span class="label label-default"> {{$user->method}} </span> </td>
@@ -159,6 +159,9 @@
                                                                 <a href="javascript:doMonitor('{{$user->id}}');"> 流量概况 </a>
                                                             </li>
                                                             <li>
+                                                                <a href="javascript:ipMonitor('{{$user->id}}');"> 在线巡查 </a>
+                                                            </li>
+                                                            <li>
                                                                 <a href="javascript:resetTraffic('{{$user->id}}');"> 流量清零 </a>
                                                             </li>
                                                             <li>
@@ -203,7 +206,7 @@
 
         // 批量生成账号
         function batchAddUsers() {
-            layer.confirm('将自动生成5个账号，确定继续吗？', {icon: 3, title:'警告'}, function(index) {
+            layer.confirm('将自动生成5个账号，确定继续吗？', {icon: 3, title:'注意'}, function(index) {
                 $.post("{{url('admin/batchAddUsers')}}", {_token:'{{csrf_token()}}'}, function(ret) {
                     layer.msg(ret.message, {time:1000}, function() {
                         if (ret.status == 'success') {
@@ -223,7 +226,7 @@
 
         // 编辑账号
         function editUser(id) {
-            window.location.href = '{{url('admin/editUser?id=')}}' + id + '&page=' + '{{Request::get('page', 1)}}';
+            window.location.href = '{{url('admin/editUser?id=')}}' + id;
         }
 
         // 删除账号
@@ -268,6 +271,10 @@
         // 流量监控
         function doMonitor(id) {
             window.location.href = '{{url('admin/userMonitor?id=')}}' + id;
+        }
+
+        function ipMonitor(id) {
+            window.location.href = '{{url('admin/onlineIPMonitor?id=')}}' + id;
         }
 
         // 重置流量
@@ -317,7 +324,7 @@
         // 复制订阅链接
         var clipboard = new Clipboard('.copySubscribeLink');
         clipboard.on('success', function(e) {
-            layer.alert("成功复制该用户的订阅链接");
+            layer.alert("成功复制该用户的订阅链接", {icon: 1, title:'提示'});
         });
         clipboard.on('error', function(e) {
             console.log(e);
